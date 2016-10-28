@@ -6,6 +6,7 @@ import (
 	"github.com/sensu/uchiwa/uchiwa"
 	"github.com/sensu/uchiwa/uchiwa/audit"
 	"github.com/sensu/uchiwa/uchiwa/authentication"
+    "github.com/sensu/uchiwa/uchiwa/authdriver"
 	"github.com/sensu/uchiwa/uchiwa/authorization"
 	"github.com/sensu/uchiwa/uchiwa/config"
 	"github.com/sensu/uchiwa/uchiwa/filters"
@@ -20,13 +21,17 @@ func main() {
 	config := config.Load(*configFile, *configDir)
 
 	u := uchiwa.Init(config)
-
-	auth := authentication.New(config.Uchiwa.Auth)
-	if config.Uchiwa.Auth.Driver == "simple" {
-		auth.Simple(config.Uchiwa.Users)
-	} else {
-		auth.None()
-	}
+    filter := false
+    auth := authentication.New(config.Uchiwa.Auth)
+    if config.Uchiwa.Auth.Driver == "simple" {
+        auth.Simple(config.Uchiwa.Users)
+    } else if config.Uchiwa.Auth.Driver == "ldap" {
+        authdriver.New(config.Uchiwa.Ldap)
+        auth.Advanced(authdriver.Ldap, "ldap")
+        filter = true
+    } else {
+        auth.None()
+    }
 
 	// Audit
 	audit.Log = audit.LogMock
@@ -35,7 +40,11 @@ func main() {
 	uchiwa.Authorization = &authorization.Uchiwa{}
 
 	// Filters
-	uchiwa.Filters = &filters.Uchiwa{}
+    if filter {
+        uchiwa.Filters = &filters.LdapFilter{}
+    }else{
+        uchiwa.Filters = &filters.Uchiwa{}
+    }
 
 	u.WebServer(publicPath, auth)
 }
