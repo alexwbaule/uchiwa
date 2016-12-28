@@ -1,6 +1,56 @@
+### 0.21.0 (2016-12-08)
+#### Features
+- Increase accuracy of the silenced attribute for Sensu events - [Issue #602](https://github.com/sensu/uchiwa/issues/602)
+- Add the TTL attribute to the checks view - [Issue #496](https://github.com/sensu/uchiwa/issues/496)
+
+#### Bug Fixes
+- Use relative URLs for Uchiwa API resources - [Issue #600](https://github.com/sensu/uchiwa/issues/600)
+- Fix silencing from the client view - [Issue #601](https://github.com/sensu/uchiwa/issues/601)
+- Prevent an empty popover when all clients are healthy - [Issue #607](https://github.com/sensu/uchiwa/issues/607)
+- Display the output of all checks on the client view - [Issue #612](https://github.com/sensu/uchiwa/issues/612)
+
+### 0.20.2 (2016-11-21)
+#### Bug Fixes
+- Use the ngSrc directive to prevent failed requests when loading the logo URL -
+[Issue #599](https://github.com/sensu/uchiwa/issues/599)
+- Also display the custom logo on the login page -
+[PR #128](https://github.com/sensu/uchiwa-web/pull/128)
+- Fix the user dropdown when authenticated -
+[PR #128](https://github.com/sensu/uchiwa-web/pull/128)
+- Fix the theme selection on the settings view -
+[PR #128](https://github.com/sensu/uchiwa-web/pull/128)
+- Adjust the error description if the Uchiwa backend config is unavailable -
+[Commit 5de458a](https://github.com/sensu/uchiwa/commit/5de458a)
+
+### 0.20.1 (2016-11-17)
+#### Bug Fixes
+- Prevent any caching of the index.html file in order to facilitate the upgrade
+process - [PR #597](https://github.com/sensu/uchiwa/pull/597)
+- Do not apply a filter on the status attribute in the client view -
+[PR #127](https://github.com/sensu/uchiwa-web/pull/127)
+- Fix a typographical error in the clients popover of the sidebar -
+[PR #126](https://github.com/sensu/uchiwa-web/pull/126)
+
+### 0.20.0 (2016-11-14)
+#### Features
+- Added various users-level configuration attributes to customize Uchiwa - [PR #125](https://github.com/sensu/uchiwa-web/pull/125)
+- Support regex and key:value search queries - [PR #122](https://github.com/sensu/uchiwa-web/pull/122)
+- Sidebar popovers redesign - [PR #119](https://github.com/sensu/uchiwa-web/pull/119)
+- Aggregates can now be deleted - [PR #118](https://github.com/sensu/uchiwa-web/pull/118)
+- Show the reason in the silenced view - [PR #116](https://github.com/sensu/uchiwa-web/pull/116)
+
+#### Other
+- Refactoring of the Angular services - [PR #120](https://github.com/sensu/uchiwa-web/pull/120)
+- The checks and subscriptions filters now only show values associated with a datacenter if one is selected in the datacenters filter - [PR #123](https://github.com/sensu/uchiwa-web/pull/123)
+- Improve notification messages - [Issue #467](https://github.com/sensu/uchiwa/issues/467)
+- Move iframes to their own panels in the client view - [Issue #360](https://github.com/sensu/uchiwa/issues/360)
+- Pre-0.26 Sensu APIs are now marked as deprecated in the logs - [Issue #590](https://github.com/sensu/uchiwa/issues/590)
+- Refactoring of the Angular bootstrapping - [PR #125](https://github.com/sensu/uchiwa-web/pull/125)
+- Remove underscore.js dependency - [PR #125](https://github.com/sensu/uchiwa-web/pull/125)
+
 ### 0.19.0 (2016-10-16)
 #### Features
-- Allow silencing of checks and subscriptions across datacenters [PR #112](https://github.com/sensu/uchiwa-web/pull/112)
+- Allow silencing of checks and subscriptions across datacenters - [PR #112](https://github.com/sensu/uchiwa-web/pull/112)
 - Display rich aggregates data - [PR #113](https://github.com/sensu/uchiwa-web/pull/113)
 
 #### Bug Fixes

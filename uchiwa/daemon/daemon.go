@@ -57,10 +57,11 @@ func (d *Daemon) Start(interval int, data chan *structs.Data) {
 func (d *Daemon) buildData() {
 	d.buildEvents()
 	d.buildClients()
-	d.buildChecks()
-	d.buildSilenced()
-	d.buildStashes()
+	setID(d.Data.Checks, "/")
+	setID(d.Data.Silenced, ":")
+	setID(d.Data.Stashes, "/")
 	d.BuildSubscriptions()
+	setID(d.Data.Aggregates, "/")
 	d.buildMetrics()
 	d.buildSEMetrics()
 }
@@ -84,8 +85,8 @@ func (d *Daemon) fetchData() {
 		}
 		silenced, err := datacenter.GetSilenced()
 		if err != nil {
-			logger.Warningf("Connection failed to the datacenter %s.", datacenter.Name)
-			continue
+			logger.Warningf("Impossible to retrieve silenced entries from the "+
+				"datacenter %s. Silencing might not be possible, please update Sensu", datacenter.Name)
 		}
 		checks, err := datacenter.GetChecks()
 		if err != nil {

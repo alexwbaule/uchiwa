@@ -22,7 +22,7 @@ var Filters filters.Filters
 
 // aggregateHandler serves the /aggregates/:name[...] endpoint
 func (u *Uchiwa) aggregateHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" && r.Method != "HEAD" {
+	if r.Method != "GET" && r.Method != "HEAD" && r.Method != "DELETE" {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
@@ -60,7 +60,7 @@ func (u *Uchiwa) aggregateHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusMultipleChoices)
 
 				encoder := json.NewEncoder(w)
-				if err := encoder.Encode(visibleAggregates); err != nil {
+				if err = encoder.Encode(visibleAggregates); err != nil {
 					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -73,7 +73,7 @@ func (u *Uchiwa) aggregateHandler(w http.ResponseWriter, r *http.Request) {
 
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
-			if err := json.NewEncoder(gz).Encode(visibleAggregates); err != nil {
+			if err = json.NewEncoder(gz).Encode(visibleAggregates); err != nil {
 				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -101,6 +101,15 @@ func (u *Uchiwa) aggregateHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Are we responding to a /aggregates/:name request?
 	if len(resources) == 3 {
+		if r.Method == "DELETE" {
+			err := u.DeleteAggregate(name, dc)
+			if err != nil {
+				http.Error(w, fmt.Sprint(err), 500)
+				return
+			}
+			return
+		}
+
 		aggregate, err := u.GetAggregate(name, dc)
 		if err != nil {
 			http.Error(w, fmt.Sprint(err), 500)
@@ -287,7 +296,7 @@ func (u *Uchiwa) clientHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusMultipleChoices)
 
 				encoder := json.NewEncoder(w)
-				if err := encoder.Encode(visibleClients); err != nil {
+				if err = encoder.Encode(visibleClients); err != nil {
 					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -300,7 +309,7 @@ func (u *Uchiwa) clientHandler(w http.ResponseWriter, r *http.Request) {
 
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
-			if err := json.NewEncoder(gz).Encode(visibleClients); err != nil {
+			if err = json.NewEncoder(gz).Encode(visibleClients); err != nil {
 				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -433,6 +442,12 @@ func (u *Uchiwa) configHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		if resources[2] == "auth" {
 			fmt.Fprintf(w, "%s", u.PublicConfig.Uchiwa.Auth.Driver)
+		} else if resources[2] == "users" {
+			encoder := json.NewEncoder(w)
+			if err := encoder.Encode(u.PublicConfig.Uchiwa.UsersOptions); err != nil {
+				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+				return
+			}
 		} else {
 			http.Error(w, "", http.StatusNotFound)
 			return
@@ -516,7 +531,7 @@ func (u *Uchiwa) eventHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusMultipleChoices)
 
 				encoder := json.NewEncoder(w)
-				if err := encoder.Encode(visibleClients); err != nil {
+				if err = encoder.Encode(visibleClients); err != nil {
 					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -528,7 +543,7 @@ func (u *Uchiwa) eventHandler(w http.ResponseWriter, r *http.Request) {
 
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
-			if err := json.NewEncoder(gz).Encode(visibleClients); err != nil {
+			if err = json.NewEncoder(gz).Encode(visibleClients); err != nil {
 				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -737,7 +752,7 @@ func (u *Uchiwa) resultsHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusMultipleChoices)
 
 				encoder := json.NewEncoder(w)
-				if err := encoder.Encode(visibleClients); err != nil {
+				if err = encoder.Encode(visibleClients); err != nil {
 					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -749,7 +764,7 @@ func (u *Uchiwa) resultsHandler(w http.ResponseWriter, r *http.Request) {
 
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
-			if err := json.NewEncoder(gz).Encode(visibleClients); err != nil {
+			if err = json.NewEncoder(gz).Encode(visibleClients); err != nil {
 				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -825,7 +840,7 @@ func (u *Uchiwa) stashHandler(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusMultipleChoices)
 
 				encoder := json.NewEncoder(w)
-				if err := encoder.Encode(visibleStashes); err != nil {
+				if err = encoder.Encode(visibleStashes); err != nil {
 					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 					return
 				}
@@ -837,7 +852,7 @@ func (u *Uchiwa) stashHandler(w http.ResponseWriter, r *http.Request) {
 
 			gz := gzip.NewWriter(w)
 			defer gz.Close()
-			if err := json.NewEncoder(gz).Encode(visibleStashes); err != nil {
+			if err = json.NewEncoder(gz).Encode(visibleStashes); err != nil {
 				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -940,6 +955,16 @@ func (u *Uchiwa) silencedHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Could not clear from entry in the silenced registry", http.StatusNotFound)
 				return
 			}
+			return
+		}
+
+		if u.Config.Uchiwa.UsersOptions.DisableNoExpiration && data.Expire < 1 {
+			http.Error(w, "Open-ended silence entries are disallowed", http.StatusNotFound)
+			return
+		}
+
+		if u.Config.Uchiwa.UsersOptions.RequireSilencingReason && data.Reason == "" {
+			http.Error(w, "A reason must be provided for every silence entry", http.StatusNotFound)
 			return
 		}
 
@@ -1048,6 +1073,19 @@ func (u *Uchiwa) subscriptionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// noCacheHandler sets the proper headers to prevent any sort of caching for the
+// index.html file, served as /
+func noCacheHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			w.Header().Set("cache-control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("pragma", "no-cache")
+			w.Header().Set("expires", "0")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // WebServer starts the web server and serves GET & POST requests
 func (u *Uchiwa) WebServer(publicPath *string, auth authentication.Config) {
 	// Private endpoints
@@ -1072,7 +1110,7 @@ func (u *Uchiwa) WebServer(publicPath *string, auth authentication.Config) {
 	}
 
 	// Static files
-	http.Handle("/", http.FileServer(http.Dir(*publicPath)))
+	http.Handle("/", noCacheHandler(http.FileServer(http.Dir(*publicPath))))
 
 	// Public endpoints
 	http.Handle("/config/", http.HandlerFunc(u.configHandler))

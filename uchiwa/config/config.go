@@ -31,6 +31,13 @@ var (
 			Level:   "default",
 			Logfile: "/var/log/sensu/sensu-enterprise-dashboard-audit.log",
 		},
+		UsersOptions: UsersOptions{
+			DateFormat:             "YYYY-MM-DD HH:mm:ss",
+			DefaultExpireOnResolve: false,
+			DefaultTheme:           "uchiwa-default",
+			DisableNoExpiration:    false,
+			RequireSilencingReason: false,
+		},
 	}
 	defaultSensuConfig = SensuConfig{
 		Port:    4567,
@@ -234,6 +241,10 @@ func initUchiwa(global GlobalConfig) GlobalConfig {
 
 	// Set the logger level
 	logger.SetLogLevel(global.LogLevel)
+
+	// Set the refresh rate for frontend
+	global.UsersOptions.Refresh = global.Refresh * 1000
+
 	return global
 }
 
