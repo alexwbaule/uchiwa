@@ -3,9 +3,11 @@ package logger
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -36,7 +38,10 @@ type Source struct {
 	Line int    `json:"line,omitempty"`
 }
 
-var log = new(Logger)
+var (
+		log = new(Logger)
+		logMutex = &sync.Mutex{}
+)
 
 func init() {
 	configuredLevel = INFO
@@ -68,6 +73,9 @@ func (l *Logger) now() {
 }
 
 func (l *Logger) print(level string, format string, args ...interface{}) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
 	l.now()
 	l.Message = l.message(format, args)
 	l.Level = &level
@@ -84,7 +92,7 @@ func (l *Logger) print(level string, format string, args ...interface{}) {
 
 	data, err := json.Marshal(l)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println(html.EscapeString(err.Error()))
 		return
 	}
 	fmt.Println(string(data))
