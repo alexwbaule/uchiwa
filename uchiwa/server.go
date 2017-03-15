@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/sensu/uchiwa/uchiwa/audit"
 	"github.com/sensu/uchiwa/uchiwa/authentication"
 	"github.com/sensu/uchiwa/uchiwa/authorization"
 	"github.com/sensu/uchiwa/uchiwa/filters"
+	"github.com/sensu/uchiwa/uchiwa/helpers"
 	"github.com/sensu/uchiwa/uchiwa/logger"
 	"github.com/sensu/uchiwa/uchiwa/structs"
 )
@@ -441,7 +443,7 @@ func (u *Uchiwa) configHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if resources[2] == "auth" {
-			fmt.Fprintf(w, "%s", u.PublicConfig.Uchiwa.Auth.Driver)
+			fmt.Fprintf(w, "{\"driver\": \"%s\"}", u.PublicConfig.Uchiwa.Auth.Driver)
 		} else if resources[2] == "users" {
 			encoder := json.NewEncoder(w)
 			if err := encoder.Encode(u.PublicConfig.Uchiwa.UsersOptions); err != nil {
@@ -662,6 +664,34 @@ func (u *Uchiwa) healthHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(returnCode)
 	w.Write(encoded)
+	return
+}
+
+// logoutHandler serves the /logout endpoint
+func (u *Uchiwa) logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	token := authentication.GetJWTFromContext(r)
+	var username string
+	username, ok := token.Claims["username"].(string)
+	if !ok {
+		username = "Unknown"
+	}
+
+	// Add the logout to the audit log
+	log := structs.AuditLog{
+		Action:     "logout",
+		Level:      "default",
+		RemoteAddr: helpers.GetIP(r),
+		User:       username,
+	}
+	audit.Log(log)
+
+	authentication.DeleteCookies(w)
+	http.Redirect(w, r, "/login", 302)
 	return
 }
 
@@ -944,8 +974,8 @@ func (u *Uchiwa) silencedHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if token != nil && token.Claims["Username"] != nil {
-			data.Creator = token.Claims["Username"].(string)
+		if token != nil && token.Claims["username"] != nil {
+			data.Creator = token.Claims["username"].(string)
 		}
 
 		resources := strings.Split(r.URL.Path, "/")
@@ -1034,8 +1064,8 @@ func (u *Uchiwa) stashesHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if token != nil && token.Claims["Username"] != nil {
-			data.Content["username"] = token.Claims["Username"]
+		if token != nil && token.Claims["username"] != nil {
+			data.Content["username"] = token.Claims["username"]
 		}
 
 		err = u.PostStash(data)
@@ -1073,6 +1103,27 @@ func (u *Uchiwa) subscriptionsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// userHandler serves the /user endpoint
+func (u *Uchiwa) userHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" && r.Method != "HEAD" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	token := authentication.GetJWTFromContext(r)
+	if token == nil {
+		http.Error(w, "", http.StatusUnauthorized)
+		return
+	}
+
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(token.Claims); err != nil {
+		http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+		return
+	}
+	return
+}
+
 // noCacheHandler sets the proper headers to prevent any sort of caching for the
 // index.html file, served as /
 func noCacheHandler(next http.Handler) http.Handler {
@@ -1098,6 +1149,7 @@ func (u *Uchiwa) WebServer(publicPath *string, auth authentication.Config) {
 	http.Handle("/datacenters", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.datacentersHandler))))
 	http.Handle("/events", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.eventsHandler))))
 	http.Handle("/events/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.eventHandler))))
+	http.Handle("/logout", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.logoutHandler))))
 	http.Handle("/request", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.requestHandler))))
 	http.Handle("/results/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.resultsHandler))))
 	http.Handle("/silenced", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.silencedHandler))))
@@ -1105,6 +1157,8 @@ func (u *Uchiwa) WebServer(publicPath *string, auth authentication.Config) {
 	http.Handle("/stashes", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.stashesHandler))))
 	http.Handle("/stashes/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.stashHandler))))
 	http.Handle("/subscriptions", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.subscriptionsHandler))))
+	http.Handle("/user", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.userHandler))))
+
 	if u.Config.Uchiwa.Enterprise == false {
 		http.Handle("/metrics", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.metricsHandler))))
 	}

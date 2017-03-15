@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
+	"reflect"
+	"time"
 
 	"github.com/sensu/uchiwa/uchiwa/logger"
 	"github.com/sensu/uchiwa/uchiwa/structs"
@@ -199,6 +202,36 @@ func GetIP(r *http.Request) string {
 	return ip
 }
 
+// InterfaceToSlice takes a slice of type interface{} and returns a slice of interface
+func InterfaceToSlice(slice interface{}) ([]interface{}, error) {
+	value := reflect.ValueOf(slice)
+	if value.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("The interface provided is not a slice: %+v", slice)
+	}
+
+	result := make([]interface{}, value.Len())
+
+	for i := 0; i < value.Len(); i++ {
+		result[i] = value.Index(i).Interface()
+	}
+
+	return result, nil
+}
+
+// InterfaceToString takes a slice of interface{} a slice of string
+func InterfaceToString(i []interface{}) []string {
+	var result []string
+
+	for _, value := range i {
+		v, ok := value.(string)
+		if ok {
+			result = append(result, v)
+		}
+	}
+
+	return result
+}
+
 // IsCheckSilenced determines whether a check for a particular client is silenced.
 // Returns true if the check is silenced and a slice of silence entries IDs
 func IsCheckSilenced(check map[string]interface{}, client, dc string, silenced []interface{}) (bool, []string) {
@@ -311,4 +344,19 @@ func IsStringInArray(item string, array []string) bool {
 	}
 
 	return false
+}
+
+// RandomString generates a random string of the provided length
+func RandomString(length int) string {
+	if length == 0 {
+		length = 32
+	}
+
+	char := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+	rand.Seed(time.Now().UTC().UnixNano())
+	buf := make([]byte, length)
+	for i := 0; i < length; i++ {
+		buf[i] = char[rand.Intn(len(char)-1)]
+	}
+	return string(buf)
 }

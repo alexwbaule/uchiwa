@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/context"
 	"github.com/sensu/uchiwa/uchiwa/audit"
 	"github.com/sensu/uchiwa/uchiwa/helpers"
@@ -13,10 +14,10 @@ import (
 
 // New function initalizes and returns a Config struct
 func New(auth structs.Auth) Config {
-	a := Config{
+	c := Config{
 		Auth: auth,
 	}
-	return a
+	return c
 }
 
 // publicHandler does not enforce authentication
@@ -30,10 +31,31 @@ func publicHandler(next http.Handler) http.Handler {
 // or the access token provided in the configuration
 func restrictedHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the JWT
-		token, err := verifyJWT(r)
-		if err != nil {
-			logger.Debug("No JWT token provided")
+		var token *jwt.Token
+		authenticationToken, err := r.Cookie(authenticationCookieName)
+		if err == nil {
+			// Verify the JWT
+			token, err = verifyJWT(authenticationToken.Value)
+			if err != nil {
+				logger.Debug("No JWT token provided")
+			} else {
+				xsrfTokenFromClaims, ok := token.Claims["xsrfToken"]
+				if !ok {
+					logger.Debug("The XSRF Token is missing from the JWT claims")
+					http.Error(w, "Request unauthorized", http.StatusUnauthorized)
+					return
+				}
+
+				xsrfTokenFromHeader := r.Header.Get("X-XSRF-TOKEN")
+
+				if xsrfTokenFromHeader == "" || xsrfTokenFromClaims != xsrfTokenFromHeader {
+					logger.Debug("The XSRF token does not match the XSRF claim")
+					http.Error(w, "Request unauthorized", http.StatusUnauthorized)
+					return
+				}
+			}
+		} else {
+			logger.Debugf("No AuthenticationToken cookie found: %s", err.Error())
 		}
 
 		// Verify the access token if no JWT was provided
@@ -48,6 +70,31 @@ func restrictedHandler(next http.Handler) http.Handler {
 			return
 		}
 
+		// Determine the audit level of the request
+		var level string
+		if r.Method == "GET" || r.Method == "HEAD" {
+			level = "verbose"
+		} else {
+			level = "default"
+		}
+
+		// Determine the user of the request
+		var username string
+		username, ok := token.Claims["username"].(string)
+		if !ok {
+			username = "Unknown"
+		}
+
+		// Add the request to the audit log
+		log := structs.AuditLog{
+			Action:     r.Method,
+			Level:      level,
+			RemoteAddr: helpers.GetIP(r),
+			URL:        r.URL.String(),
+			User:       username,
+		}
+		audit.Log(log)
+
 		setJWTInContext(r, token)
 		next.ServeHTTP(w, r)
 		context.Clear(r)
@@ -56,15 +103,15 @@ func restrictedHandler(next http.Handler) http.Handler {
 }
 
 // Authenticate calls the proper handler based on whether authentication is enabled or not
-func (a *Config) Authenticate(next http.Handler) http.Handler {
-	if a.DriverName == "none" {
+func (c *Config) Authenticate(next http.Handler) http.Handler {
+	if c.DriverName == "none" {
 		return publicHandler(next)
 	}
 	return restrictedHandler(next)
 }
 
 // Login authenticates a user against the authentication driver
-func (a *Config) Login() http.Handler {
+func (c *Config) Login() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			decoder := json.NewDecoder(r.Body)
@@ -91,30 +138,44 @@ func (a *Config) Login() http.Handler {
 				return
 			}
 
-			user, err := a.login(u, p)
+			user, err := c.login(u, p)
 			if err != nil {
 				logger.Info(err)
 
-				// Output to audit log
-				log := structs.AuditLog{Action: "loginfailure", Level: "default", Output: err.Error()}
-				log.RemoteAddr = helpers.GetIP(r)
+				// Add the login failure to the audit log
+				log := structs.AuditLog{
+					Action:     "loginfailure",
+					Level:      "default",
+					Output:     err.Error(),
+					RemoteAddr: helpers.GetIP(r),
+					User:       u,
+				}
 				audit.Log(log)
 
 				http.Error(w, "", http.StatusUnauthorized)
 				return
 			}
 
-			// Obfuscate user attributes
-			user.Password = ""
-
-			j, err := json.Marshal(user)
+			xsrfToken := helpers.RandomString(32)
+			authenticationToken, err := GetToken(user, xsrfToken)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				logger.Infof("Authentication failed, could not create the token: %s", err)
+				http.Error(w, "", http.StatusUnauthorized)
 				return
 			}
 
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(j)
+			// Set the required cookies
+			SetCookies(w, authenticationToken, xsrfToken)
+
+			// Add the successful login to the audit log
+			log := structs.AuditLog{
+				Action:     "loginsuccess",
+				Level:      "default",
+				RemoteAddr: helpers.GetIP(r),
+				User:       u,
+			}
+			audit.Log(log)
+
 			return
 		}
 
