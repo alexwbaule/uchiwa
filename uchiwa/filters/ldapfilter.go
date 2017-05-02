@@ -231,6 +231,10 @@ func (f *LdapFilter) Subscriptions(data *[]structs.Subscription, token *jwt.Toke
     }
     return subscriptions
 }
+// Client is a function that filters GET requests.
+func (f *LdapFilter) Client(data interface{}, token *jwt.Token) bool {
+		    return true
+}
 
 func (f *LdapFilter) Clients(data *[]interface{}, token *jwt.Token) []interface{} {
     clients := make([]interface{}, 0)
