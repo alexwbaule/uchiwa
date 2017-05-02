@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/tls"
+
 	"github.com/sensu/uchiwa/uchiwa/authentication"
 	"github.com/sensu/uchiwa/uchiwa/structs"
 )
@@ -78,20 +80,26 @@ type Gitlab struct {
 
 // Ldap struct contains the LDAP driver configuration
 type Ldap struct {
+	LdapServer
+	Debug   bool
+	Roles   []authentication.Role
+	Servers []LdapServer
+}
+
+type LdapServer struct {
 	Server               string
 	Port                 int
 	BaseDN               string
 	BindUser             string
 	BindPass             string
-	Debug                bool
 	Dialect              string
 	DisableNestedGroups  bool
 	GroupBaseDN          string
 	GroupObjectClass     string
 	GroupMemberAttribute string
 	Insecure             bool
-	Roles                []authentication.Role
 	Security             string
+	TLSConfig            *tls.Config
 	UserAttribute        string
 	UserBaseDN           string
 	UserObjectClass      string
@@ -115,10 +123,11 @@ type SSL struct {
 // UsersOptions struct contains various config tweaks
 type UsersOptions struct {
 	DateFormat             string
-	DefaultExpireOnResolve bool
 	DefaultTheme           string
 	DisableNoExpiration    bool
+	Favicon                string
 	LogoURL                string
 	Refresh                int
 	RequireSilencingReason bool
+	SilenceDurations       []float32
 }

@@ -214,6 +214,103 @@ func (u *Uchiwa) aggregatesHandler(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// checkHandler serves the /checks/ endpoint
+func (u *Uchiwa) checkHandler(w http.ResponseWriter, r *http.Request) {
+	// We only support DELETE & GET requests
+	if r.Method != "GET" && r.Method != "HEAD" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	token := authentication.GetJWTFromContext(r)
+
+	// Get the client name
+	resources := strings.Split(r.URL.Path, "/")
+	if len(resources) < 3 || resources[2] == "" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+	name := resources[2]
+
+	// Get the datacenter name, passed as a query string
+	dc := r.URL.Query().Get("dc")
+
+	if dc == "" {
+		checks, err := u.findCheck(name)
+		if err != nil {
+			http.Error(w, fmt.Sprint(err), http.StatusNotFound)
+			return
+		}
+
+		u.Mu.Lock()
+		visibleChecks := Filters.Checks(&checks, token)
+		u.Mu.Unlock()
+
+		if len(visibleChecks) > 1 {
+			// Create header
+			w.Header().Add("Accept-Charset", "utf-8")
+			w.Header().Add("Content-Type", "application/json")
+
+			// If GZIP compression is not supported by the client
+			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+				w.WriteHeader(http.StatusMultipleChoices)
+
+				encoder := json.NewEncoder(w)
+				if err = encoder.Encode(visibleChecks); err != nil {
+					http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+					return
+				}
+
+				return
+			}
+
+			w.Header().Add("Content-Encoding", "gzip")
+			w.WriteHeader(http.StatusMultipleChoices)
+
+			gz := gzip.NewWriter(w)
+			defer gz.Close()
+			if err = json.NewEncoder(gz).Encode(visibleChecks); err != nil {
+				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			return
+		}
+
+		c, ok := checks[0].(map[string]interface{})
+		if !ok {
+			http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+			return
+		}
+		dc, ok = c["dc"].(string)
+		if !ok {
+			http.Error(w, fmt.Sprint(err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Verify that an authenticated user is authorized to access this resource
+	unauthorized := Filters.GetRequest(dc, token)
+	if unauthorized {
+		http.Error(w, fmt.Sprint(""), http.StatusNotFound)
+		return
+	}
+
+	data, err := u.GetCheck(dc, name)
+	if err != nil {
+		http.Error(w, fmt.Sprint(err), http.StatusNotFound)
+		return
+	}
+
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(data); err != nil {
+		http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	return
+}
+
 // checksHandler serves the /checks endpoint
 func (u *Uchiwa) checksHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" && r.Method != "HEAD" {
@@ -385,44 +482,70 @@ func (u *Uchiwa) clientHandler(w http.ResponseWriter, r *http.Request) {
 
 // clientsHandler serves the /clients endpoint
 func (u *Uchiwa) clientsHandler(w http.ResponseWriter, r *http.Request) {
-	// We only support GET requests
-	if r.Method != "GET" && r.Method != "HEAD" {
-		http.Error(w, "", http.StatusBadRequest)
-		return
-	}
+	// Support GET & HEAD requests
+	if r.Method == "GET" || r.Method == "HEAD" {
+		token := authentication.GetJWTFromContext(r)
 
-	token := authentication.GetJWTFromContext(r)
+		u.Mu.Lock()
+		clients := Filters.Clients(&u.Data.Clients, token)
+		u.Mu.Unlock()
 
-	u.Mu.Lock()
-	clients := Filters.Clients(&u.Data.Clients, token)
-	u.Mu.Unlock()
+		if len(clients) == 0 {
+			clients = make([]interface{}, 0)
+		}
 
-	if len(clients) == 0 {
-		clients = make([]interface{}, 0)
-	}
+		// Create header
+		w.Header().Add("Accept-Charset", "utf-8")
+		w.Header().Add("Content-Type", "application/json")
 
-	// Create header
-	w.Header().Add("Accept-Charset", "utf-8")
-	w.Header().Add("Content-Type", "application/json")
+		// If GZIP compression is not supported by the client
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			encoder := json.NewEncoder(w)
+			if err := encoder.Encode(clients); err != nil {
+				http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+				return
+			}
+			return
+		}
 
-	// If GZIP compression is not supported by the client
-	if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		encoder := json.NewEncoder(w)
-		if err := encoder.Encode(clients); err != nil {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		if err := json.NewEncoder(gz).Encode(clients); err != nil {
 			http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
 			return
 		}
 		return
-	}
+	} else if r.Method == "POST" {
+		// Support POST requests
+		decoder := json.NewDecoder(r.Body)
+		var payload interface{}
+		err := decoder.Decode(&payload)
+		if err != nil {
+			http.Error(w, "Could not decode body", http.StatusInternalServerError)
+			return
+		}
 
-	w.Header().Set("Content-Encoding", "gzip")
-	gz := gzip.NewWriter(w)
-	defer gz.Close()
-	if err := json.NewEncoder(gz).Encode(clients); err != nil {
-		http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+		// verify that the authenticated user is authorized to access this resource
+		token := authentication.GetJWTFromContext(r)
+
+		authorized := Filters.Client(payload, token)
+		if !authorized {
+			http.Error(w, fmt.Sprint(""), http.StatusNotFound)
+			return
+		}
+
+		err = u.UpdateClient(payload)
+		if err != nil {
+			http.Error(w, "", http.StatusNotFound)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
 		return
 	}
 
+	http.Error(w, "", http.StatusBadRequest)
 	return
 }
 
@@ -455,6 +578,47 @@ func (u *Uchiwa) configHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// datacentersHandler serves the /datacenters/:name endpoint
+func (u *Uchiwa) datacenterHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" && r.Method != "HEAD" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	resources := strings.Split(r.URL.Path, "/")
+	if len(resources) < 3 || resources[2] == "" {
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	name := resources[2]
+
+	token := authentication.GetJWTFromContext(r)
+	unauthorized := Filters.GetRequest(name, token)
+	if unauthorized {
+		http.Error(w, fmt.Sprint(""), http.StatusNotFound)
+		return
+	}
+
+	// Create header
+	w.Header().Add("Accept-Charset", "utf-8")
+	w.Header().Add("Content-Type", "application/json")
+
+	datacenter, err := u.Datacenter(name)
+	if err != nil {
+		http.Error(w, fmt.Sprint(""), http.StatusNotFound)
+		return
+	}
+
+	encoder := json.NewEncoder(w)
+	if err := encoder.Encode(datacenter); err != nil {
+		http.Error(w, fmt.Sprintf("Cannot encode response data: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	return
 }
 
 // datacentersHandler serves the /datacenters endpoint
@@ -988,7 +1152,7 @@ func (u *Uchiwa) silencedHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if u.Config.Uchiwa.UsersOptions.DisableNoExpiration && data.Expire < 1 {
+		if u.Config.Uchiwa.UsersOptions.DisableNoExpiration && (data.Expire < 1 && !data.ExpireOnResolve) {
 			http.Error(w, "Open-ended silence entries are disallowed", http.StatusNotFound)
 			return
 		}
@@ -1143,10 +1307,12 @@ func (u *Uchiwa) WebServer(publicPath *string, auth authentication.Config) {
 	http.Handle("/aggregates", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.aggregatesHandler))))
 	http.Handle("/aggregates/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.aggregateHandler))))
 	http.Handle("/checks", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.checksHandler))))
+	http.Handle("/checks/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.checkHandler))))
 	http.Handle("/clients", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.clientsHandler))))
 	http.Handle("/clients/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.clientHandler))))
 	http.Handle("/config", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.configHandler))))
 	http.Handle("/datacenters", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.datacentersHandler))))
+	http.Handle("/datacenters/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.datacenterHandler))))
 	http.Handle("/events", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.eventsHandler))))
 	http.Handle("/events/", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.eventHandler))))
 	http.Handle("/logout", auth.Authenticate(Authorization.Handler(http.HandlerFunc(u.logoutHandler))))

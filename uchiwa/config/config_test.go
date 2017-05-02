@@ -14,11 +14,9 @@ func TestLoad(t *testing.T) {
 	assert.Equal(t, 10, conf.Sensu[0].Timeout)
 	assert.Equal(t, 10, conf.Uchiwa.Refresh)
 	assert.Equal(t, "YYYY-MM-DD HH:mm:ss", conf.Uchiwa.UsersOptions.DateFormat)
-	assert.Equal(t, false, conf.Uchiwa.UsersOptions.DefaultExpireOnResolve)
 	assert.Equal(t, "uchiwa-default", conf.Uchiwa.UsersOptions.DefaultTheme)
 	assert.Equal(t, false, conf.Uchiwa.UsersOptions.DisableNoExpiration)
 	assert.Equal(t, "", conf.Uchiwa.UsersOptions.LogoURL)
-	assert.Equal(t, 10000, conf.Uchiwa.UsersOptions.Refresh)
 	assert.Equal(t, false, conf.Uchiwa.UsersOptions.RequireSilencingReason)
 	assert.Equal(t, 389, conf.Uchiwa.Ldap.Port)
 	assert.Equal(t, "person", conf.Uchiwa.Ldap.UserObjectClass)
@@ -112,10 +110,32 @@ func TestInitUchiwa(t *testing.T) {
 	uchiwa = initUchiwa(conf)
 	assert.Equal(t, "gitlab", uchiwa.Auth.Driver)
 
-	conf = GlobalConfig{Ldap: Ldap{BaseDN: "cn=foo", Server: "127.0.0.1"}}
+	conf = GlobalConfig{
+		Ldap: Ldap{
+			LdapServer: LdapServer{
+				BaseDN: "cn=foo",
+				Server: "127.0.0.1",
+			},
+		},
+	}
+	expectedLdapServers := []LdapServer{
+		LdapServer{
+			BaseDN:               "cn=foo",
+			Server:               "127.0.0.1",
+			Port:                 389,
+			GroupBaseDN:          "cn=foo",
+			GroupObjectClass:     "groupOfNames",
+			GroupMemberAttribute: "member",
+			Security:             "none",
+			UserAttribute:        "sAMAccountName",
+			UserBaseDN:           "cn=foo",
+			UserObjectClass:      "person",
+		},
+	}
+
 	uchiwa = initUchiwa(conf)
 	assert.Equal(t, "ldap", uchiwa.Auth.Driver)
-	assert.Equal(t, Ldap{BaseDN: "cn=foo", GroupBaseDN: "cn=foo", UserBaseDN: "cn=foo", Server: "127.0.0.1"}, uchiwa.Ldap)
+	assert.Equal(t, expectedLdapServers, uchiwa.Ldap.Servers)
 
 	conf = GlobalConfig{Db: Db{Driver: "mysql", Scheme: "foo"}}
 	uchiwa = initUchiwa(conf)
@@ -145,7 +165,14 @@ func TestGetPublic(t *testing.T) {
 			Users:  []authentication.User{authentication.User{ID: 1}},
 			Db:     Db{Scheme: "foo"},
 			Github: Github{ClientID: "foo", ClientSecret: "secret"},
-			Ldap:   Ldap{BindPass: "secret"},
+			Ldap: Ldap{
+				LdapServer: LdapServer{
+					BindPass: "secret",
+				},
+				Servers: []LdapServer{
+					LdapServer{BindPass: "secret"},
+				},
+			},
 		},
 	}
 
@@ -167,4 +194,40 @@ func TestGetPublic(t *testing.T) {
 	assert.Equal(t, "*****", pubConf.Uchiwa.Github.ClientID)
 	assert.Equal(t, "*****", pubConf.Uchiwa.Github.ClientSecret)
 	assert.Equal(t, "*****", pubConf.Uchiwa.Ldap.BindPass)
+	assert.Equal(t, "*****", pubConf.Uchiwa.Ldap.Servers[0].BindPass)
+}
+
+func TestInitLdap(t *testing.T) {
+	// The default values should be applied to every LDAP server
+	conf := Config{
+		Uchiwa: GlobalConfig{
+			Ldap: Ldap{
+				Servers: []LdapServer{
+					LdapServer{Server: "10.0.0.1"},
+				},
+			},
+		},
+	}
+	initLdap(&conf.Uchiwa.Ldap)
+	assert.Equal(t, 1, len(conf.Uchiwa.Ldap.Servers))
+	assert.Equal(t, 389, conf.Uchiwa.Ldap.Servers[0].Port)
+
+	// A single LDAP server in Ldap struct should be moved to Servers struct
+	conf = Config{
+		Uchiwa: GlobalConfig{
+			Ldap: Ldap{
+				LdapServer: LdapServer{
+					Server: "10.0.0.1",
+				},
+			},
+		},
+	}
+	initLdap(&conf.Uchiwa.Ldap)
+	assert.Equal(t, 1, len(conf.Uchiwa.Ldap.Servers))
+}
+
+func TestUsersOptions(t *testing.T) {
+	// The SilenceDurations default value should be overwritten
+	conf := Load("../../fixtures/config_test.json", "../../fixtures/users")
+	assert.Equal(t, 4, len(conf.Uchiwa.UsersOptions.SilenceDurations))
 }

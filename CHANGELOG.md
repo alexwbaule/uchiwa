@@ -1,3 +1,58 @@
+### 0.24.0 (2017-04-13)
+#### Features
+- Add a check view - [Issue #672](https://github.com/sensu/uchiwa/issues/672)
+- Add a 'not healthy' option to status filter in clients view -
+[Issue #445](https://github.com/sensu/uchiwa/issues/445)
+
+#### Bug Fixes
+- Fix regex queries on fields within the check or client object -
+[Issue #674](https://github.com/sensu/uchiwa/issues/674)
+
+#### Other
+- Shorten long URLs in the client view -
+[Issue #629](https://github.com/sensu/uchiwa/issues/629)
+- Prevent a user from accessing the login page if authentication is disabled -
+[PR #155](https://github.com/sensu/uchiwa-web/pull/155)
+- Force the browser location to the login page upon logout -
+[PR #154](https://github.com/sensu/uchiwa-web/pull/154)
+- Replace Godeps with govendor for Go vendoring -
+[Commit 91fd100](https://github.com/sensu/uchiwa/commit/91fd1009bf207ee8ffbf674f88cc6491a2b186d6)
+
+### 0.23.1 (2017-03-29)
+#### Bug Fixes
+- Prevent caching of deprecated assets when upgrading -
+[Issue #666](https://github.com/sensu/uchiwa/issues/666)
+- Fix bulk silencing when choosing a duration and/or a reason -
+[Issue #667](https://github.com/sensu/uchiwa/issues/667)
+- Support negative lookahead for search queries -
+[Issue #664](https://github.com/sensu/uchiwa/issues/664)
+
+#### Other
+- Increase verbosity for datacenters connection errors -
+[Issue #663](https://github.com/sensu/uchiwa/issues/663)
+- Upgrade to Angular 1.6 -
+[Issue #653](https://github.com/sensu/uchiwa/issues/653)
+- Improve responsive design with long text -
+[Issue #641](https://github.com/sensu/uchiwa/issues/641)
+
+### 0.23.0 (2017-03-24)
+#### Bug Fixes
+- Fix a visual glitch when refreshing a page on Firefox -
+[Issue #654](https://github.com/sensu/uchiwa/issues/654)
+
+#### Features
+- Refactoring of the silencing modal window -
+[Issue #644](https://github.com/sensu/uchiwa/issues/644)
+- Support edition of proxy clients in the Sensu client registry -
+[Issue #651](https://github.com/sensu/uchiwa/issues/651)
+- Display new information about Sensu servers, available since Sensu 0.28, in a new
+datacenter view - [Issue #652](https://github.com/sensu/uchiwa/issues/652)
+- Support custom favicons - [Issue #606](https://github.com/sensu/uchiwa/issues/606)
+
+#### Other
+- Set the Secure flag on authentication cookies when serving over HTTPS -
+[Issue #656](https://github.com/sensu/uchiwa/issues/656)
+
 ### 0.22.2 (2017-03-10)
 #### Bug Fixes
 - Add Cross Site Request Forgery (XSRF) protection - [Issue #638](https://github.com/sensu/uchiwa/issues/638)

@@ -22,12 +22,14 @@ var (
 		LogLevel: "info",
 		Refresh:  10,
 		Ldap: Ldap{
-			Port:                 389,
-			Security:             "none",
-			UserAttribute:        "sAMAccountName",
-			UserObjectClass:      "person",
-			GroupMemberAttribute: "member",
-			GroupObjectClass:     "groupOfNames",
+			LdapServer: LdapServer{
+				Port:                 389,
+				Security:             "none",
+				UserAttribute:        "sAMAccountName",
+				UserObjectClass:      "person",
+				GroupMemberAttribute: "member",
+				GroupObjectClass:     "groupOfNames",
+			},
 		},
 		Audit: Audit{
 			Level:   "default",
@@ -35,10 +37,10 @@ var (
 		},
 		UsersOptions: UsersOptions{
 			DateFormat:             "YYYY-MM-DD HH:mm:ss",
-			DefaultExpireOnResolve: false,
 			DefaultTheme:           "uchiwa-default",
 			DisableNoExpiration:    false,
 			RequireSilencingReason: false,
+			SilenceDurations:       []float32{0.25, 1, 24},
 		},
 	}
 	defaultSensuConfig = SensuConfig{
@@ -206,14 +208,9 @@ func initUchiwa(global GlobalConfig) GlobalConfig {
 		for i := range global.Gitlab.Roles {
 			authentication.Roles = append(authentication.Roles, global.Gitlab.Roles[i])
 		}
-	} else if global.Ldap.Server != "" {
+	} else if global.Ldap.Server != "" || len(global.Ldap.Servers) >= 1 {
+		initLdap(&global.Ldap)
 		global.Auth.Driver = "ldap"
-		if global.Ldap.GroupBaseDN == "" {
-			global.Ldap.GroupBaseDN = global.Ldap.BaseDN
-		}
-		if global.Ldap.UserBaseDN == "" {
-			global.Ldap.UserBaseDN = global.Ldap.BaseDN
-		}
 
 		for i := range global.Ldap.Roles {
 			authentication.Roles = append(authentication.Roles, global.Ldap.Roles[i])
@@ -250,10 +247,38 @@ func initUchiwa(global GlobalConfig) GlobalConfig {
 	// Set the logger level
 	logger.SetLogLevel(global.LogLevel)
 
+	// Initialize the users options
 	// Set the refresh rate for frontend
 	global.UsersOptions.Refresh = global.Refresh * 1000
 
 	return global
+}
+
+func initLdap(conf *Ldap) {
+	// If we have a server defined directly in the Ldap struct, move it to the
+	// Servers slice
+	if conf.Server != "" && len(conf.Servers) == 0 {
+		conf.Servers = append(conf.Servers, conf.LdapServer)
+	}
+
+	// Apply the default config to every LDAP server
+	for i := range conf.Servers {
+		if conf.Servers[i].Server == "" {
+			logger.Fatal("Every LDAP server must have an address configured with the server attribute")
+		}
+
+		if conf.Servers[i].GroupBaseDN == "" {
+			conf.Servers[i].GroupBaseDN = conf.Servers[i].BaseDN
+		}
+
+		if conf.Servers[i].UserBaseDN == "" {
+			conf.Servers[i].UserBaseDN = conf.Servers[i].BaseDN
+		}
+
+		if err := mergo.Merge(&conf.Servers[i], defaultGlobalConfig.Ldap.LdapServer); err != nil {
+			logger.Fatal(err)
+		}
+	}
 }
 
 // GetPublic generates the public configuration
@@ -282,6 +307,12 @@ func (c *Config) GetPublic() *Config {
 
 	for i := range p.Uchiwa.Ldap.Roles {
 		p.Uchiwa.Ldap.Roles[i].AccessToken = obfuscatedValue
+	}
+
+	p.Uchiwa.Ldap.Servers = make([]LdapServer, len(c.Uchiwa.Ldap.Servers))
+	for i := range c.Uchiwa.Ldap.Servers {
+		p.Uchiwa.Ldap.Servers[i] = c.Uchiwa.Ldap.Servers[i]
+		p.Uchiwa.Ldap.Servers[i].BindPass = obfuscatedValue
 	}
 
 	for i := range p.Uchiwa.OIDC.Roles {
