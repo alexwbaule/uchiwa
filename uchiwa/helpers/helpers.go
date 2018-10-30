@@ -14,6 +14,16 @@ import (
 	"github.com/sensu/uchiwa/uchiwa/structs"
 )
 
+// return true if String in Slice, false otherwise
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
 // BuildClientsMetrics builds the metrics for the events
 func BuildClientsMetrics(clients *[]interface{}) *structs.StatusMetrics {
 	metrics := structs.StatusMetrics{}
@@ -234,10 +244,9 @@ func InterfaceToString(i []interface{}) []string {
 
 // IsCheckSilenced determines whether a check for a particular client is silenced.
 // Returns true if the check is silenced and a slice of silence entries IDs
-func IsCheckSilenced(check map[string]interface{}, client, dc string, silenced []interface{}) (bool, []string) {
+func IsCheckSilenced(check, client map[string]interface{}, dc string, silenced []interface{}) (bool, []string) {
 	var isSilenced bool
-	var isSilencedBy []string
-	var subscribers []interface{}
+	var commonSubscriptions, isSilencedBy, subscribers, subscriptions []string
 
 	if dc == "" || len(silenced) == 0 {
 		return false, isSilencedBy
@@ -248,10 +257,33 @@ func IsCheckSilenced(check map[string]interface{}, client, dc string, silenced [
 		return false, isSilencedBy
 	}
 
+	clientName, ok := client["name"].(string)
+	if !ok {
+		clientName = ""
+	}
+
+	// Retrieve the check subscribers
 	if check["subscribers"] != nil {
-		subscribers, ok = check["subscribers"].([]interface{})
+		s, ok := check["subscribers"].([]interface{})
 		if !ok {
 			return false, isSilencedBy
+		}
+		subscribers = InterfaceToString(s)
+	}
+
+	// Retrieve the client subscriptions
+	if client["subscriptions"] != nil {
+		s, ok := client["subscriptions"].([]interface{})
+		if !ok {
+			return false, isSilencedBy
+		}
+		subscriptions = InterfaceToString(s)
+	}
+
+	// Get the subscriptions both check and client have in common
+	for _, subscriber := range subscribers {
+		if IsStringInArray(subscriber, subscriptions) {
+			commonSubscriptions = append(commonSubscriptions, subscriber)
 		}
 	}
 
@@ -266,6 +298,15 @@ func IsCheckSilenced(check map[string]interface{}, client, dc string, silenced [
 			continue
 		}
 
+		// Ignore silenced entries that have not begun yet
+		if m["begin"] != nil {
+			begin := time.Unix(int64(m["begin"].(float64)), 0)
+			now := time.Now()
+			if now.Before(begin) {
+				continue
+			}
+		}
+
 		// Check (e.g. *:check_cpu)
 		if m["id"] == fmt.Sprintf("*:%s", checkName) {
 			isSilenced = true
@@ -274,21 +315,20 @@ func IsCheckSilenced(check map[string]interface{}, client, dc string, silenced [
 		}
 
 		// Client subscription (e.g. client:foo:* )
-		if m["id"] == fmt.Sprintf("client:%s:*", client) {
+		if m["id"] == fmt.Sprintf("client:%s:*", clientName) {
 			isSilenced = true
 			isSilencedBy = append(isSilencedBy, m["id"].(string))
 			continue
 		}
 
 		// Client's check subscription (e.g. client:foo:check_cpu )
-		if m["id"] == fmt.Sprintf("client:%s:%s", client, checkName) {
+		if m["id"] == fmt.Sprintf("client:%s:%s", clientName, checkName) {
 			isSilenced = true
 			isSilencedBy = append(isSilencedBy, m["id"].(string))
 			continue
 		}
 
-		for _, s := range subscribers {
-			subscription := s.(string)
+		for _, subscription := range commonSubscriptions {
 			// Subscription (e.g. load-balancer:* )
 			if m["id"] == fmt.Sprintf("%s:*", subscription) {
 				isSilenced = true

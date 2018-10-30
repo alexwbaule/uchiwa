@@ -82,6 +82,9 @@ task :package do
     run_command(fpm_cmd)
   end
 
+  puts "Signing the RPM package ..."
+  run_command("build/sign-rpm rpm --addsign *.rpm")
+
   puts "Moving packages to the package directory ..."
   FileUtils.mv(Dir.glob("*.{deb,rpm}"), PKG_DIR)
   run_command("ls -la #{PKG_DIR}/")
@@ -98,7 +101,7 @@ task :organize do
   distributions = {
     'debian': {
       arch: arch,
-      releases: [7, 8]
+      releases: [7, 8, 9]
     },
     'el': {
       arch: arch,
@@ -106,7 +109,7 @@ task :organize do
     },
     'ubuntu': {
       arch: arch,
-      releases: [12.04, 14.04, 16.04]
+      releases: [12.04, 14.04, 16.04, 18.04]
     }
   }
 

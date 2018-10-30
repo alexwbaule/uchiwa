@@ -103,8 +103,10 @@ type InfoServer struct {
 	ID        string                        `json:"id"`
 	Hostname  string                        `json:"hostname"`
 	Address   string                        `json:"address"`
-	IsLeader  bool                          `json:"is_leader"`
+	IsLeader  bool                          `json:"is_leader,omitempty"`
 	Metrics   map[string]map[string]float32 `json:"metrics"`
+	Sensu     map[string]interface{}        `json:"sensu,omitempty"`
+	Tasks     []string                      `json:"tasks,omitempty"`
 	Timestamp int                           `json:"timestamp"`
 }
 
@@ -166,7 +168,9 @@ type SERawMetric struct {
 
 // Sensu is a structure for holding the sensu version
 type Sensu struct {
-	Version string `json:"version"`
+	EnterpriseVersion string            `json:"enterprise_version,omitempty"`
+	Settings          map[string]string `json:"settings,omitempty"`
+	Version           string            `json:"version"`
 }
 
 type transport struct {

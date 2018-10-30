@@ -7,7 +7,7 @@ import (
 	"github.com/sensu/uchiwa/uchiwa/logger"
 )
 
-func (u *Uchiwa) buildClientHistory(client, dc string, history []interface{}) []interface{} {
+func (u *Uchiwa) buildClientHistory(client map[string]interface{}, dc string, history []interface{}) []interface{} {
 	for _, h := range history {
 		m, ok := h.(map[string]interface{})
 		if !ok {
@@ -15,16 +15,16 @@ func (u *Uchiwa) buildClientHistory(client, dc string, history []interface{}) []
 			continue
 		}
 
-		m["client"] = client
+		m["client"] = client["name"].(string)
 		m["dc"] = dc
 
-		check, ok := m["last_result"].(map[string]interface{})
+		checkMap, ok := m["last_result"].(map[string]interface{})
 		if !ok {
 			logger.Warningf("Could not assert this check to a struct: %+v", m["last_result"])
 			continue
 		}
 
-		m["silenced"], m["silenced_by"] = helpers.IsCheckSilenced(check, client, dc, u.Data.Silenced)
+		m["silenced"], m["silenced_by"] = helpers.IsCheckSilenced(checkMap, client, dc, u.Data.Silenced)
 	}
 
 	return history
@@ -67,48 +67,6 @@ func (u *Uchiwa) findClient(name string) ([]interface{}, error) {
 	return clients, nil
 }
 
-func (u *Uchiwa) findOutput(id *string, h map[string]interface{}, dc *string) string {
-	if h["last_status"] == 0 {
-		return ""
-	}
-
-	for _, e := range u.Data.Events {
-		// does the dc match?
-		m, ok := e.(map[string]interface{})
-		if !ok {
-			logger.Warningf("Could not assert this event to an interface %+v", e)
-			continue
-		}
-		if m["dc"] != *dc {
-			continue
-		}
-
-		// does the client match?
-		c, ok := m["client"].(map[string]interface{})
-		if !ok {
-			logger.Warningf("Could not assert this client to an interface: %+v", c)
-			continue
-		}
-
-		if c["name"] != *id {
-			continue
-		}
-
-		// does the check match?
-		k := m["check"].(map[string]interface{})
-		if !ok {
-			logger.Warningf("Could not assert this check to an interface: %+v", k)
-			continue
-		}
-		if k["name"] != h["check"] {
-			continue
-		}
-		return k["output"].(string)
-	}
-
-	return ""
-}
-
 // GetClient retrieves a specific client
 func (u *Uchiwa) GetClient(dc, name string) (map[string]interface{}, error) {
 	api, err := getAPI(u.Datacenters, dc)
@@ -148,11 +106,18 @@ func (u *Uchiwa) GetClientHistory(dc, name string) ([]interface{}, error) {
 		return nil, err
 	}
 
+	// Get the client
+	client, err := u.GetClient(dc, name)
+	if err != nil {
+		// The error would already have been logged at this point
+		return nil, err
+	}
+
 	// lock results
 	u.Mu.Lock()
 	defer u.Mu.Unlock()
 
-	history := u.buildClientHistory(name, dc, h)
+	history := u.buildClientHistory(client, dc, h)
 
 	return history, nil
 }

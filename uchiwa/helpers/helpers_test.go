@@ -120,8 +120,8 @@ func TestGetMapFromInterface(t *testing.T) {
 }
 
 func TestIsCheckSilenced(t *testing.T) {
-	var check map[string]interface{}
-	var client, dc string
+	var check, client map[string]interface{}
+	var dc string
 	var silenced []interface{}
 	var isSilencedBy []string
 
@@ -130,7 +130,7 @@ func TestIsCheckSilenced(t *testing.T) {
 
 	// Not silenced
 	check = map[string]interface{}{"name": "check_cpu", "subscribers": []interface{}{"load-balancer"}}
-	client = "foo"
+	client = map[string]interface{}{"name": "foo", "subscriptions": []interface{}{"client:foo", "load-balancer"}}
 	dc = "us-east-1"
 	isSilenced, _ = IsCheckSilenced(check, client, dc, silenced)
 	assert.False(t, isSilenced)
@@ -143,7 +143,7 @@ func TestIsCheckSilenced(t *testing.T) {
 	// Silenced check with check
 	// e.g. *:check_cpu
 	silenced = []interface{}{map[string]interface{}{"dc": "us-east-1", "id": "*:check_cpu"}}
-	isSilenced, isSilencedBy = IsCheckSilenced(check, "", dc, silenced)
+	isSilenced, isSilencedBy = IsCheckSilenced(check, client, dc, silenced)
 	assert.True(t, isSilenced)
 	assert.Equal(t, "*:check_cpu", isSilencedBy[0])
 
@@ -191,6 +191,29 @@ func TestIsCheckSilenced(t *testing.T) {
 	isSilenced, isSilencedBy = IsCheckSilenced(check, client, dc, silenced)
 	assert.True(t, isSilenced)
 	assert.Equal(t, "*:check_cpu", isSilencedBy[0])
+
+	// Silenced check with client's subscription and check's name
+	check = map[string]interface{}{"name": "check_cpu", "subscribers": []interface{}{"production", "us-east-1"}}
+	client = map[string]interface{}{"name": "foo", "subscriptions": []interface{}{"production", "us-east-1"}}
+	silenced = []interface{}{map[string]interface{}{"dc": "us-east-1", "id": "production:check_cpu"}}
+	isSilenced, isSilencedBy = IsCheckSilenced(check, client, dc, silenced)
+	assert.True(t, isSilenced)
+	assert.Equal(t, "production:check_cpu", isSilencedBy[0])
+
+	// Check and client do not share a common subscription
+	// https://github.com/sensu/uchiwa/issues/755
+	check = map[string]interface{}{"name": "check_foo", "subscribers": []interface{}{"foo", "bar", "baz"}}
+	client = map[string]interface{}{"name": "foo", "subscriptions": []interface{}{"bar"}}
+	silenced = []interface{}{map[string]interface{}{"dc": "us-east-1", "id": "foo:check_foo"}}
+	isSilenced, _ = IsCheckSilenced(check, client, dc, silenced)
+	assert.False(t, isSilenced)
+
+	// Check and client do share a common subscription
+	check = map[string]interface{}{"name": "check_foo", "subscribers": []interface{}{"foo", "bar", "baz"}}
+	client = map[string]interface{}{"name": "foo", "subscriptions": []interface{}{"bar"}}
+	silenced = []interface{}{map[string]interface{}{"dc": "us-east-1", "id": "bar:check_foo"}}
+	isSilenced, _ = IsCheckSilenced(check, client, dc, silenced)
+	assert.True(t, isSilenced)
 }
 
 func TestInterfaceToSlice(t *testing.T) {

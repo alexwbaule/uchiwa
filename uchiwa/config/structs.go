@@ -16,6 +16,7 @@ type Config struct {
 
 // SensuConfig struct contains conf about a Sensu API
 type SensuConfig struct {
+	Advanced Advanced
 	Name     string
 	Host     string
 	Port     int
@@ -55,6 +56,13 @@ type Audit struct {
 	Logfile string
 }
 
+// Advanced contains advanced configuration for Sensu datacenters HTTP client
+type Advanced struct {
+	CloseRequest      bool
+	DisableKeepAlives bool
+	Tracing           bool
+}
+
 // Db struct contains the SQL driver configuration
 type Db struct {
 	Driver string
@@ -86,6 +94,7 @@ type Ldap struct {
 	Servers []LdapServer
 }
 
+// LdapServer contains the configuration of a specific LDAP server
 type LdapServer struct {
 	Server               string
 	Port                 int
@@ -99,7 +108,7 @@ type LdapServer struct {
 	GroupMemberAttribute string
 	Insecure             bool
 	Security             string
-	TLSConfig            *tls.Config
+	TLSConfig            *tls.Config `json:"-"`
 	UserAttribute        string
 	UserBaseDN           string
 	UserObjectClass      string
@@ -107,17 +116,22 @@ type LdapServer struct {
 
 // OIDC struct contains the OIDC driver configuration
 type OIDC struct {
-	ClientID     string
-	ClientSecret string
-	Insecure     bool
-	Roles        []authentication.Role
-	Server       string
+	AdditionalScopes []string
+	ClientID         string
+	ClientSecret     string
+	Insecure         bool
+	RedirectURL      string
+	Roles            []authentication.Role
+	Server           string
 }
 
 // SSL struct contains the path the SSL certificate and key
 type SSL struct {
-	CertFile string
-	KeyFile  string
+	CertFile      string
+	KeyFile       string
+	CipherSuite   []string
+	TLSMinVersion string
+	TLSConfig     *tls.Config `json:"-"`
 }
 
 // UsersOptions struct contains various config tweaks
